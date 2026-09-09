@@ -32,6 +32,8 @@ class SupabaseClient:
             "environment_readings": [],
             "anomalies": [],
             "orders": [],
+            "tasks": [],
+            "racks": [],
         }
         self._auto_id: dict[str, int] = {k: 1 for k in self._memory_db.keys()}
 

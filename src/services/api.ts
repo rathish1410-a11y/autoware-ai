@@ -73,4 +73,27 @@ export const api = {
       method: 'POST',
     });
   },
+
+  async workerCheckin(workerId: number, zoneId: number): Promise<Worker> {
+    return fetchJson<Worker>(`/workers/${workerId}/checkin?zone_id=${zoneId}`, {
+      method: 'POST',
+    });
+  },
+
+  async completeTask(taskId: number): Promise<{ status: string; task: any }> {
+    return fetchJson<{ status: string; task: any }>(`/tasks/${taskId}/complete`, {
+      method: 'POST',
+    });
+  },
+
+  async reconcileItem(itemId: number, observedQuantity: number): Promise<{ status: string; item_id: number; reconciled_quantity: number }> {
+    return fetchJson<{ status: string; item_id: number; reconciled_quantity: number }>(`/items/${itemId}/reconcile?observed_quantity=${observedQuantity}`, {
+      method: 'POST',
+    });
+  },
+
+  async getTasks(): Promise<any[]> {
+    return fetchJson<any[]>('/tasks');
+  },
 };
+

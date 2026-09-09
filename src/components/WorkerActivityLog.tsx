@@ -1,10 +1,12 @@
 import React from 'react';
-import { Worker, WarehouseEvent } from '../types';
-import { Users, Activity, MapPin, Clock, Zap, User, Moon, Sun } from 'lucide-react';
+import { Worker, WarehouseEvent, WarehouseZone } from '../types';
+import { Users, Activity, MapPin, Clock, Zap, User, Moon, Sun, CheckCircle } from 'lucide-react';
 
 interface WorkerActivityLogProps {
   workers: Worker[];
   recentEvents: WarehouseEvent[];
+  zones?: WarehouseZone[];
+  onCheckin?: (workerId: number, zoneId: number) => void;
 }
 
 const eventColors: Record<string, string> = {
@@ -24,7 +26,7 @@ const AVATAR_COLORS = [
   'from-emerald-500 to-cyan-500',
 ];
 
-export const WorkerActivityLog: React.FC<WorkerActivityLogProps> = ({ workers, recentEvents }) => {
+export const WorkerActivityLog: React.FC<WorkerActivityLogProps> = ({ workers, recentEvents, zones = [], onCheckin }) => {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Worker Roster */}
@@ -52,38 +54,60 @@ export const WorkerActivityLog: React.FC<WorkerActivityLogProps> = ({ workers, r
               return (
                 <div
                   key={worker.id}
-                  className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 hover:border-slate-700 transition-all flex items-center gap-3.5"
+                  className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 hover:border-slate-700 transition-all flex flex-col gap-2.5"
                 >
-                  {/* Avatar */}
-                  <div className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${avatarGrad} flex items-center justify-center shrink-0 shadow-lg`}>
-                    <span className="font-black text-slate-950 text-sm">{worker.name.charAt(0)}</span>
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <h4 className="font-bold text-xs text-slate-100 truncate">{worker.name}</h4>
-                      <span className={`flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold rounded-md border ${
-                        isNight
-                          ? 'bg-slate-800 text-slate-400 border-slate-700'
-                          : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                      }`}>
-                        {isNight ? <Moon className="w-2.5 h-2.5" /> : <Sun className="w-2.5 h-2.5" />}
-                        {worker.shift.toUpperCase()}
-                      </span>
+                  <div className="flex items-center gap-3.5">
+                    {/* Avatar */}
+                    <div className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${avatarGrad} flex items-center justify-center shrink-0 shadow-lg`}>
+                      <span className="font-black text-slate-950 text-sm">{worker.name.charAt(0)}</span>
                     </div>
-                    {worker.zone_name ? (
-                      <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
-                        <MapPin className="w-3 h-3 text-slate-600" />
-                        <span className="text-slate-300 font-medium">{worker.zone_name}</span>
-                        <span className="text-slate-500 capitalize">({worker.zone_type})</span>
-                      </p>
-                    ) : (
-                      <p className="text-[11px] text-slate-500 italic mt-0.5">Unassigned</p>
-                    )}
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h4 className="font-bold text-xs text-slate-100 truncate">{worker.name}</h4>
+                        <span className={`flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold rounded-md border ${
+                          isNight
+                            ? 'bg-slate-800 text-slate-400 border-slate-700'
+                            : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                        }`}>
+                          {isNight ? <Moon className="w-2.5 h-2.5" /> : <Sun className="w-2.5 h-2.5" />}
+                          {worker.shift.toUpperCase()}
+                        </span>
+                      </div>
+                      {worker.zone_name ? (
+                        <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
+                          <MapPin className="w-3 h-3 text-slate-600" />
+                          <span className="text-slate-300 font-medium">{worker.zone_name}</span>
+                          <span className="text-slate-500 capitalize">({worker.zone_type})</span>
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-slate-500 italic mt-0.5">Unassigned</p>
+                      )}
+                    </div>
+
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/60 animate-pulse shrink-0" />
                   </div>
 
-                  {/* Online indicator */}
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/60 animate-pulse shrink-0" />
+                  {/* Worker Zone Check-in Control */}
+                  {zones.length > 0 && onCheckin && (
+                    <div className="pt-2 border-t border-slate-900 flex items-center justify-between gap-2">
+                      <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3 text-indigo-400" />
+                        Checked-in Zone:
+                      </span>
+                      <select
+                        value={worker.current_zone_id || ''}
+                        onChange={(e) => onCheckin(worker.id, Number(e.target.value))}
+                        className="bg-slate-900 border border-slate-700 text-slate-200 text-[11px] font-mono rounded-lg px-2 py-1 focus:outline-none focus:border-indigo-500"
+                      >
+                        {zones.map((z) => (
+                          <option key={z.id} value={z.id}>
+                            {z.name} ({z.type.toUpperCase()})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
               );
             })}

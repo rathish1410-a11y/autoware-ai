@@ -10,6 +10,7 @@ import { ItemHistoryModal } from './components/ItemHistoryModal';
 import { RouteOptimizerPanel } from './components/RouteOptimizerPanel';
 import { EnvironmentPanel } from './components/EnvironmentPanel';
 import { WorkerActivityLog } from './components/WorkerActivityLog';
+import { RoboticArmWidget } from './components/RoboticArmWidget';
 import { Activity, AlertTriangle, Boxes, Cpu, ShieldAlert, Zap, ArrowUpRight } from 'lucide-react';
 
 export function App() {
@@ -78,12 +79,33 @@ export function App() {
     api.getItems(sku).then((res) => { if (res.length > 0) setSelectedItem(res[0]); });
   };
 
+  const handleWorkerCheckin = async (workerId: number, zoneId: number) => {
+    try {
+      await api.workerCheckin(workerId, zoneId);
+      await loadData();
+    } catch (e) { console.error(e); }
+  };
+
+  const handleCompleteTask = async (taskId: number) => {
+    try {
+      await api.completeTask(taskId);
+      await loadData();
+    } catch (e) { console.error(e); }
+  };
+
+  const handleReconcileItem = async (itemId: number, observedQuantity: number) => {
+    try {
+      await api.reconcileItem(itemId, observedQuantity);
+      await loadData();
+    } catch (e) { console.error(e); }
+  };
+
   const criticalCount = anomalies.filter(a => a.severity === 'critical' || a.severity === 'high').length;
   const inStockCount  = items.filter(i => i.status === 'in_stock').length;
-  const dispatchCount = items.filter(i => i.status === 'dispatched').length;
+  const activeMisplacedSku = anomalies.find(a => a.anomaly_type === 'misplaced' && !a.resolved)?.item_sku;
 
   const metricCards = [
-    { label: 'Warehouse Zones',   value: zones.length,  sub: '6-zone grid layout',         color: 'indigo', Icon: Boxes, delta: null },
+    { label: 'Warehouse Zones',   value: zones.length,  sub: '6-zone top-down layout',     color: 'indigo', Icon: Boxes, delta: null },
     { label: 'Tracked SKUs',      value: items.length,  sub: `${inStockCount} in-stock`,    color: 'cyan',   Icon: Cpu,   delta: null },
     { label: 'AI Anomalies',      value: anomalies.length, sub: `${criticalCount} critical / high`, color: criticalCount ? 'red' : 'amber', Icon: ShieldAlert, delta: null },
     { label: 'Live Events Total', value: totalEvents,   sub: '1-3s update cadence',         color: 'emerald',Icon: Activity, delta: null },
@@ -122,7 +144,6 @@ export function App() {
               key={label}
               className={`relative bg-slate-900/80 p-5 rounded-2xl border border-${color}-500/20 shadow-lg overflow-hidden group hover:-translate-y-0.5 transition-transform`}
             >
-              {/* Glowing top edge */}
               <div className={`absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-${color}-500 to-transparent opacity-70`} />
 
               <div className="flex items-start justify-between">
@@ -152,9 +173,9 @@ export function App() {
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-extrabold text-white uppercase tracking-widest flex items-center gap-2">
                   <Zap className="w-4 h-4 text-cyan-400 fill-current animate-pulse" />
-                  Live 2D Spatial Warehouse Map
+                  Live 2D Top-Down Spatial Warehouse Map
                 </h2>
-                <span className="text-xs text-slate-500 font-mono">Click zone for detail view</span>
+                <span className="text-xs text-slate-500 font-mono">Click rack / zone for details</span>
               </div>
               <WarehouseGrid
                 zones={zones}
@@ -165,18 +186,19 @@ export function App() {
                 selectedZoneId={selectedZoneId}
               />
             </div>
-            <div className="lg:col-span-1" style={{ minHeight: 540 }}>
-              <AnomalyFeed anomalies={anomalies} onSelectItem={handleSelectSku} />
+            <div className="lg:col-span-1 space-y-4" style={{ minHeight: 540 }}>
+              <RoboticArmWidget activeItemSku={activeMisplacedSku} />
+              <AnomalyFeed anomalies={anomalies} onSelectItem={handleSelectSku} onCompleteTask={handleCompleteTask} />
             </div>
           </div>
         )}
 
         {activeTab === 'anomalies' && (
-          <AnomalyFeed anomalies={anomalies} onSelectItem={handleSelectSku} />
+          <AnomalyFeed anomalies={anomalies} onSelectItem={handleSelectSku} onCompleteTask={handleCompleteTask} />
         )}
 
         {activeTab === 'inventory' && (
-          <InventoryTable items={items} onSelectItem={setSelectedItem} />
+          <InventoryTable items={items} onSelectItem={setSelectedItem} onReconcileItem={handleReconcileItem} />
         )}
 
         {activeTab === 'route' && (
@@ -188,7 +210,7 @@ export function App() {
         )}
 
         {activeTab === 'workers' && (
-          <WorkerActivityLog workers={workers} recentEvents={liveEvents} />
+          <WorkerActivityLog workers={workers} recentEvents={liveEvents} zones={zones} onCheckin={handleWorkerCheckin} />
         )}
       </main>
 
@@ -205,3 +227,4 @@ export function App() {
 }
 
 export default App;
+

@@ -5,6 +5,7 @@ import { Search, Filter, Package, History, ChevronDown, ChevronUp, TrendingUp } 
 interface InventoryTableProps {
   items: InventoryItem[];
   onSelectItem: (item: InventoryItem) => void;
+  onReconcileItem?: (itemId: number, observedQuantity: number) => void;
 }
 
 const statusConfig: Record<ItemStatus, { label: string; bg: string; text: string; border: string; dot: string }> = {
@@ -16,18 +17,35 @@ const statusConfig: Record<ItemStatus, { label: string; bg: string; text: string
   missing:    { label: 'Missing',    bg: 'bg-pink-500/20',    text: 'text-pink-300',    border: 'border-pink-500/30',    dot: 'bg-pink-400' },
 };
 
-export const InventoryTable: React.FC<InventoryTableProps> = ({ items, onSelectItem }) => {
+export const InventoryTable: React.FC<InventoryTableProps> = ({ items, onSelectItem, onReconcileItem }) => {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortField, setSortField] = useState<string>('sku');
   const [sortAsc, setSortAsc] = useState(true);
 
+  // Reconciliation modal state
+  const [reconcilingItem, setReconcilingItem] = useState<InventoryItem | null>(null);
+  const [observedQty, setObservedQty] = useState<number>(0);
+
   const categories = Array.from(new Set(items.map((i) => i.category))).filter(Boolean);
 
   const handleSort = (field: string) => {
     if (sortField === field) setSortAsc(!sortAsc);
     else { setSortField(field); setSortAsc(true); }
+  };
+
+  const handleOpenReconcile = (e: React.MouseEvent, item: InventoryItem) => {
+    e.stopPropagation();
+    setReconcilingItem(item);
+    setObservedQty(item.expected_quantity);
+  };
+
+  const handleConfirmReconcile = () => {
+    if (reconcilingItem && onReconcileItem) {
+      onReconcileItem(reconcilingItem.id, observedQty);
+      setReconcilingItem(null);
+    }
   };
 
   const filteredItems = items
@@ -82,7 +100,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({ items, onSelectI
               </h2>
               <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1.5">
                 <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-                Click any row for full chronological movement timeline
+                Track Expected vs Current Rack Locations & Stock Reconciliation
               </p>
             </div>
           </div>
@@ -146,20 +164,24 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({ items, onSelectI
                   <span className="flex items-center">{label}<SortIcon field={field} /></span>
                 </th>
               ))}
-              <th className="py-3.5 px-4 text-right">Qty (Scanned/Exp)</th>
-              <th className="py-3.5 px-4 text-center">Timeline</th>
+              <th className="py-3.5 px-4">Expected vs Current Rack</th>
+              <th className="py-3.5 px-4 text-right">Qty (Scanned / Exp)</th>
+              <th className="py-3.5 px-4 text-center">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredItems.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-12 text-center text-slate-500 text-sm">
+                <td colSpan={8} className="py-12 text-center text-slate-500 text-sm">
                   No items match the current search / filter criteria.
                 </td>
               </tr>
             ) : (
               filteredItems.map((item, index) => {
                 const s = statusConfig[item.status] || statusConfig.in_stock;
+                const expRack = item.expectedLocation || item.expected_rack_id || 'RACK-A3';
+                const currRack = item.currentLocation || item.current_rack_id || expRack;
+                const isMisplaced = expRack !== currRack;
                 const isQtyMismatch = item.scanned_quantity > 0 && item.scanned_quantity !== item.expected_quantity;
 
                 return (
@@ -182,53 +204,55 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({ items, onSelectI
                     </td>
 
                     {/* Category */}
-                    <td className="py-3.5 px-4">
-                      <span className="px-2 py-0.5 text-[10px] bg-slate-800/80 text-slate-300 rounded-md border border-slate-700">
-                        {item.category}
-                      </span>
+                    <td className="py-3.5 px-4 text-slate-400 font-mono text-[11px]">
+                      {item.category}
                     </td>
 
                     {/* Zone */}
                     <td className="py-3.5 px-4">
-                      {item.zone_name ? (
-                        <span className="px-2.5 py-1 rounded-lg bg-slate-900/80 text-slate-200 border border-slate-700 font-semibold text-[11px]">
-                          📍 {item.zone_name}
-                        </span>
-                      ) : (
-                        <span className="text-slate-500 italic text-[11px]">Unassigned</span>
-                      )}
+                      <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 font-medium text-[11px]">
+                        {item.zone_name || 'Unassigned'}
+                      </span>
                     </td>
 
                     {/* Status */}
                     <td className="py-3.5 px-4">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-extrabold rounded-lg border ${s.bg} ${s.text} ${s.border}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${s.dot} animate-pulse`} />
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold border ${s.bg} ${s.text} ${s.border}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
                         {s.label}
                       </span>
                     </td>
 
-                    {/* Qty */}
-                    <td className="py-3.5 px-4 text-right font-mono text-xs">
-                      {isQtyMismatch ? (
-                        <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/30 font-bold">
-                          ⚠ {item.scanned_quantity} / {item.expected_quantity}
+                    {/* Expected vs Current Rack */}
+                    <td className="py-3.5 px-4 font-mono text-[11px]">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-400">{expRack}</span>
+                        <span className="text-slate-600">➔</span>
+                        <span className={`font-bold ${isMisplaced ? 'text-red-400 animate-pulse' : 'text-emerald-400'}`}>
+                          {currRack}
                         </span>
-                      ) : (
-                        <span className="text-slate-300">
-                          {item.scanned_quantity} / {item.expected_quantity}
-                        </span>
-                      )}
+                        {isMisplaced && (
+                          <span className="px-1.5 py-0.5 bg-red-500/20 text-red-300 border border-red-500/30 rounded text-[9px] font-bold">
+                            MISPLACED
+                          </span>
+                        )}
+                      </div>
                     </td>
 
-                    {/* History button */}
+                    {/* Qty */}
+                    <td className="py-3.5 px-4 text-right font-mono text-[11px]">
+                      <span className={isQtyMismatch ? 'text-amber-400 font-bold' : 'text-slate-300'}>
+                        {item.scanned_quantity} / {item.expected_quantity}
+                      </span>
+                    </td>
+
+                    {/* Actions */}
                     <td className="py-3.5 px-4 text-center">
                       <button
-                        onClick={(e) => { e.stopPropagation(); onSelectItem(item); }}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/30 hover:border-indigo-400/60 transition-all text-[11px] font-bold"
-                        title="View movement timeline"
+                        onClick={(e) => handleOpenReconcile(e, item)}
+                        className="px-2.5 py-1 bg-indigo-600/30 hover:bg-indigo-600 text-indigo-200 border border-indigo-500/40 rounded-lg text-[10px] font-bold transition-all"
                       >
-                        <History className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Timeline</span>
+                        Reconcile Stock
                       </button>
                     </td>
                   </tr>
@@ -239,20 +263,54 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({ items, onSelectI
         </table>
       </div>
 
-      {/* Footer stats */}
-      <div className="p-3.5 border-t border-slate-800 bg-slate-950/50 flex flex-wrap items-center gap-4 text-[11px] font-mono">
-        <span className="text-slate-400">Showing <span className="text-cyan-400 font-bold">{filteredItems.length}</span> of <span className="text-white font-bold">{items.length}</span> items</span>
-        <span className="text-slate-600">|</span>
-        <span className="text-slate-400">
-          In Stock: <span className="text-emerald-400 font-bold">{items.filter(i => i.status === 'in_stock').length}</span>
-        </span>
-        <span className="text-slate-400">
-          Dispatched: <span className="text-blue-400 font-bold">{items.filter(i => i.status === 'dispatched').length}</span>
-        </span>
-        <span className="text-slate-400">
-          Alerts: <span className="text-amber-400 font-bold">{items.filter(i => i.status === 'damaged' || i.status === 'missing').length}</span>
-        </span>
-      </div>
+      {/* Stock Reconciliation Modal */}
+      {reconcilingItem && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-extrabold text-slate-100 text-sm">Stock Discrepancy Reconciliation</h3>
+              <button
+                onClick={() => setReconcilingItem(null)}
+                className="text-slate-500 hover:text-slate-300 text-xs font-mono"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            <div className="space-y-2 font-mono text-xs text-slate-300">
+              <p><span className="text-slate-500">Item SKU:</span> <strong className="text-indigo-400">{reconcilingItem.sku}</strong></p>
+              <p><span className="text-slate-500">Product Name:</span> {reconcilingItem.name}</p>
+              <p><span className="text-slate-500">System Recorded Qty:</span> <strong className="text-amber-400">{reconcilingItem.expected_quantity}</strong></p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-mono text-slate-400">Physically Observed Quantity:</label>
+              <input
+                type="number"
+                value={observedQty}
+                onChange={(e) => setObservedQty(Number(e.target.value))}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 font-mono text-sm focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2">
+              <button
+                onClick={() => setReconcilingItem(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-400 text-xs font-bold hover:bg-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmReconcile}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/30"
+              >
+                Confirm Reconciliation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   WarehouseZone,
   Worker,
@@ -71,6 +71,15 @@ const zoneTypeColors: Record<ZoneType, { bg: string; border: string; text: strin
   },
 };
 
+const ZONE_RACK_MAP: Record<string, string[]> = {
+  "Receiving A": ["RACK-REC-1"],
+  "Storage B": ["RACK-A1", "RACK-A2", "RACK-A3"],
+  "Storage C": ["RACK-B1", "RACK-B2"],
+  "Picking D": ["RACK-C1"],
+  "Packing E": ["RACK-C2"],
+  "Dispatch F": ["RACK-D5"],
+};
+
 export const WarehouseGrid: React.FC<WarehouseGridProps> = ({
   zones,
   workers,
@@ -80,19 +89,8 @@ export const WarehouseGrid: React.FC<WarehouseGridProps> = ({
   onSelectZone,
   selectedZoneId,
 }) => {
-  // Map grid coordinates (x: 0..2, y: 0..1)
-  const gridMatrix: (WarehouseZone | null)[][] = [
-    [null, null, null],
-    [null, null, null],
-  ];
+  const [scanningRack, setScanningRack] = useState<string | null>(null);
 
-  zones.forEach((z) => {
-    if (z.grid_y >= 0 && z.grid_y < 2 && z.grid_x >= 0 && z.grid_x < 3) {
-      gridMatrix[z.grid_y][z.grid_x] = z;
-    }
-  });
-
-  // Calculate order path index per zone if route is highlighted
   const pathMap = new Map<number, number>();
   if (highlightPath) {
     highlightPath.forEach((stop, idx) => {
@@ -106,7 +104,7 @@ export const WarehouseGrid: React.FC<WarehouseGridProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 p-4 rounded-2xl border border-slate-800 text-xs shadow-xl backdrop-blur-md">
         <div className="flex items-center space-x-3">
           <Sparkles className="w-4 h-4 text-cyan-400" />
-          <span className="font-bold text-slate-200 uppercase tracking-wider text-[11px]">Warehouse Grid Zones:</span>
+          <span className="font-bold text-slate-200 uppercase tracking-wider text-[11px]">Warehouse Top-Down Map & Racks:</span>
           {(['receiving', 'storage', 'picking', 'packing', 'dispatch'] as ZoneType[]).map((t) => (
             <div key={t} className="flex items-center space-x-1.5 capitalize">
               <span className={`w-2.5 h-2.5 rounded-full ${zoneTypeColors[t].accent}`} />
@@ -125,7 +123,6 @@ export const WarehouseGrid: React.FC<WarehouseGridProps> = ({
 
       {/* Grid Container */}
       <div className="relative bg-slate-950 p-5 sm:p-6 rounded-3xl border border-slate-800 shadow-2xl overflow-hidden">
-        {/* Subtle Cyber Grid Matrix Background */}
         <div
           className="absolute inset-0 opacity-15 pointer-events-none"
           style={{
@@ -136,130 +133,198 @@ export const WarehouseGrid: React.FC<WarehouseGridProps> = ({
 
         {/* Dynamic 2D Matrix */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 relative z-10">
-          {gridMatrix.map((row, y) =>
-            row.map((zone, x) => {
-              if (!zone) return null;
-              const typeStyle = zoneTypeColors[zone.type] || zoneTypeColors.storage;
-              const zoneWorkers = workers.filter((w) => w.current_zone_id === zone.id);
-              const env = environment[zone.id];
-              const zoneAnomalies = anomalies.filter(
-                (a) => a.explanation.includes(zone.name) || (a.item_id && zone.item_count)
-              );
-              const hasAnomaly = zoneAnomalies.length > 0;
-              const stepIndex = pathMap.get(zone.id);
-              const isSelected = selectedZoneId === zone.id;
-              const itemCount = zone.item_count || 0;
-              const capacityPct = Math.min(100, Math.round((itemCount / 40) * 100));
+          {zones.map((zone) => {
+            const typeStyle = zoneTypeColors[zone.type] || zoneTypeColors.storage;
+            const zoneWorkers = workers.filter((w) => w.current_zone_id === zone.id);
+            const env = environment[zone.id];
+            const zoneAnomalies = anomalies.filter(
+              (a) => a.explanation.includes(zone.name) || (a.item_id && zone.item_count)
+            );
+            const hasAnomaly = zoneAnomalies.length > 0;
+            const stepIndex = pathMap.get(zone.id);
+            const isSelected = selectedZoneId === zone.id;
+            const racks = ZONE_RACK_MAP[zone.name] || ["RACK-01"];
 
-              return (
-                <div
-                  key={zone.id}
-                  onClick={() => onSelectZone?.(zone.id)}
-                  className={`relative flex flex-col justify-between p-5 rounded-2xl bg-gradient-to-b ${typeStyle.bg} border transition-all duration-300 cursor-pointer group hover:-translate-y-1 ${
-                    isSelected
-                      ? 'ring-2 ring-cyan-400 border-cyan-400 shadow-xl shadow-cyan-500/25'
-                      : hasAnomaly
-                      ? 'border-red-500/80 shadow-2xl shadow-red-500/30 animate-pulse-glow'
-                      : `${typeStyle.border} ${typeStyle.glow}`
-                  }`}
-                >
-                  {/* Step order badge for route visualizer */}
-                  {stepIndex !== undefined && (
-                    <div className="absolute -top-3 -right-3 w-8 h-8 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-950 font-black text-xs flex items-center justify-center shadow-xl border-2 border-slate-950 animate-bounce">
-                      #{stepIndex}
+            return (
+              <div
+                key={zone.id}
+                onClick={() => onSelectZone?.(zone.id)}
+                className={`relative flex flex-col justify-between p-5 rounded-2xl bg-gradient-to-b ${typeStyle.bg} border transition-all duration-300 cursor-pointer group hover:-translate-y-1 ${
+                  isSelected
+                    ? 'ring-2 ring-cyan-400 border-cyan-400 shadow-xl shadow-cyan-500/25'
+                    : hasAnomaly
+                    ? 'border-red-500/80 shadow-2xl shadow-red-500/30 animate-pulse'
+                    : `${typeStyle.border} ${typeStyle.glow}`
+                }`}
+              >
+                {stepIndex !== undefined && (
+                  <div className="absolute -top-3 -right-3 w-8 h-8 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-950 font-black text-xs flex items-center justify-center shadow-xl border-2 border-slate-950 animate-bounce">
+                    #{stepIndex}
+                  </div>
+                )}
+
+                {/* Header info */}
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <h3 className="font-extrabold text-base text-slate-100 group-hover:text-cyan-300 transition-colors">
+                        {zone.name}
+                      </h3>
                     </div>
-                  )}
-
-                  {/* Header info */}
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <h3 className="font-extrabold text-base text-slate-100 group-hover:text-cyan-300 transition-colors">
-                          {zone.name}
-                        </h3>
-                      </div>
-                      <div className="flex items-center space-x-2 mt-1">
-                        <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-md uppercase border ${typeStyle.badge}`}>
-                          {zone.type}
-                        </span>
-                        <span className="text-[11px] text-slate-500 font-mono">
-                          Coord ({zone.grid_x}, {zone.grid_y})
-                        </span>
-                      </div>
-                    </div>
-
-                    {hasAnomaly && (
-                      <span className="p-1.5 rounded-lg bg-red-500/20 text-red-400 border border-red-500/40 shadow-lg" title="Active Zone Anomaly">
-                        <AlertTriangle className="w-5 h-5 text-red-400 animate-spin" />
+                    <div className="flex items-center space-x-2 mt-1">
+                      <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-md uppercase border ${typeStyle.badge}`}>
+                        {zone.type}
                       </span>
-                    )}
-                  </div>
-
-                  {/* Density Bar */}
-                  <div className="my-2 space-y-1">
-                    <div className="flex justify-between text-[10px] text-slate-400 font-mono">
-                      <span>Density Capacity</span>
-                      <span className="font-bold text-slate-200">{capacityPct}%</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-slate-900 rounded-full overflow-hidden border border-slate-800">
-                      <div
-                        className={`h-full transition-all duration-500 ${
-                          capacityPct > 80 ? 'bg-amber-400' : typeStyle.accent
-                        }`}
-                        style={{ width: `${capacityPct}%` }}
-                      />
+                      <span className="text-[11px] text-slate-500 font-mono">
+                        ({zone.grid_x}, {zone.grid_y})
+                      </span>
                     </div>
                   </div>
 
-                  {/* Metrics grid */}
-                  <div className="grid grid-cols-2 gap-2.5 my-3">
-                    {/* Item count */}
-                    <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800/80 flex items-center space-x-2.5">
-                      <Package className={`w-4 h-4 ${typeStyle.text}`} />
-                      <div>
-                        <p className="text-[10px] text-slate-400 font-medium">Inventory</p>
-                        <p className="text-sm font-black text-slate-100 font-mono">{itemCount} items</p>
-                      </div>
-                    </div>
+                  {hasAnomaly && (
+                    <span className="p-1.5 rounded-lg bg-red-500/20 text-red-400 border border-red-500/40 shadow-lg" title="Active Zone Anomaly">
+                      <AlertTriangle className="w-5 h-5 text-red-400 animate-spin" />
+                    </span>
+                  )}
+                </div>
 
-                    {/* Workers count */}
-                    <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800/80 flex items-center space-x-2.5">
-                      <Users className="w-4 h-4 text-cyan-400" />
-                      <div>
-                        <p className="text-[10px] text-slate-400 font-medium">Active Staff</p>
-                        <p className="text-sm font-black text-slate-100 font-mono">{zoneWorkers.length}</p>
-                      </div>
-                    </div>
+                {/* Top-Down Rack Display */}
+                <div className="my-3 p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
+                  <p className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest flex items-center justify-between">
+                    <span>Racks & Shelves</span>
+                    <span className="text-cyan-400">{racks.length} Active Racks</span>
+                  </p>
+
+                  <div className="grid grid-cols-1 gap-2">
+                    {racks.map((rackId) => {
+                      const isMisplacedRack = hasAnomaly && (rackId === 'RACK-D5' || rackId === 'RACK-A3');
+                      return (
+                        <div
+                          key={rackId}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setScanningRack(rackId);
+                          }}
+                          className={`p-2 rounded-lg border font-mono text-xs flex items-center justify-between transition-all ${
+                            isMisplacedRack
+                              ? 'bg-red-500/20 border-red-500/60 text-red-300 animate-pulse'
+                              : 'bg-slate-900 border-slate-800 hover:border-indigo-500 text-slate-200'
+                          }`}
+                        >
+                          <span className="font-bold flex items-center gap-1.5">
+                            <Package className="w-3.5 h-3.5 text-indigo-400" />
+                            {rackId}
+                          </span>
+                          <button className="px-2 py-0.5 bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-300 rounded text-[9px] font-bold border border-indigo-500/30">
+                            📷 Scan Rack
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Footer Stats */}
+                <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                  <div className="flex items-center space-x-1.5">
+                    <Users className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>{zoneWorkers.length} workers</span>
                   </div>
 
-                  {/* Environment readings */}
-                  <div className="pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400 font-mono">
-                    <div className="flex items-center space-x-1.5 bg-slate-950/60 px-2 py-1 rounded-lg border border-slate-800">
-                      <Thermometer className="w-3.5 h-3.5 text-amber-400" />
-                      <span className="font-bold text-slate-200">{env ? `${env.temperature.toFixed(1)}°C` : '20.0°C'}</span>
-                    </div>
-                    <div className="flex items-center space-x-1.5 bg-slate-950/60 px-2 py-1 rounded-lg border border-slate-800">
-                      <Droplets className="w-3.5 h-3.5 text-cyan-400" />
-                      <span className="font-bold text-slate-200">{env ? `${env.humidity.toFixed(1)}%` : '45.0%'}</span>
-                    </div>
-                  </div>
-
-                  {/* Active worker tags */}
-                  {zoneWorkers.length > 0 && (
-                    <div className="mt-2.5 pt-2 border-t border-slate-800/50 flex flex-wrap gap-1">
-                      {zoneWorkers.map((w) => (
-                        <span key={w.id} className="px-2 py-0.5 text-[10px] bg-slate-900/90 text-cyan-300 rounded-md border border-cyan-500/20 font-medium flex items-center gap-1">
-                          👤 {w.name.split(' ')[0]}
-                        </span>
-                      ))}
+                  {env && (
+                    <div className="flex items-center space-x-2">
+                      <span className={env.temperature > 25 ? 'text-red-400 font-bold' : 'text-slate-300'}>
+                        {env.temperature}°C
+                      </span>
+                      <span>•</span>
+                      <span className="text-slate-300">{env.humidity}%</span>
                     </div>
                   )}
                 </div>
-              );
-            })
-          )}
+
+                {/* Active worker tags */}
+                {zoneWorkers.length > 0 && (
+                  <div className="mt-2.5 pt-2 border-t border-slate-800/50 flex flex-wrap gap-1">
+                    {zoneWorkers.map((w) => (
+                      <span key={w.id} className="px-2 py-0.5 text-[10px] bg-slate-900/90 text-cyan-300 rounded-md border border-cyan-500/20 font-medium flex items-center gap-1">
+                        👤 {w.name.split(' ')[0]}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
+
+      {/* Vision Rack Scanner Modal */}
+      {scanningRack && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="font-extrabold text-slate-100 text-sm flex items-center gap-2">
+                  📷 Simulated Vision Rack Scanner
+                  <span className="px-2 py-0.5 text-xs bg-indigo-500/20 text-indigo-300 rounded-full font-mono font-bold border border-indigo-500/30">
+                    {scanningRack}
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                  Vision Detection Confidence: <strong className="text-emerald-400 font-bold">98.4%</strong>
+                </p>
+              </div>
+              <button
+                onClick={() => setScanningRack(null)}
+                className="text-slate-500 hover:text-slate-300 text-xs font-mono"
+              >
+                ✕ Close HUD
+              </button>
+            </div>
+
+            {/* Camera Viewport Simulation */}
+            <div className="relative h-64 bg-slate-950 rounded-2xl border-2 border-dashed border-cyan-500/40 overflow-hidden flex items-center justify-center">
+              <div className="absolute inset-0 bg-gradient-to-t from-cyan-950/30 via-transparent to-indigo-950/20 pointer-events-none" />
+
+              {/* Bounding Box Overlays */}
+              <div className="absolute top-8 left-12 w-32 h-20 border-2 border-emerald-400 bg-emerald-500/10 rounded-lg p-2 flex flex-col justify-between">
+                <span className="text-[9px] font-mono font-bold text-emerald-400 bg-slate-950/90 px-1 py-0.5 rounded w-max">
+                  SKU-4801 (MATCH) 98.4%
+                </span>
+              </div>
+
+              {scanningRack === 'RACK-D5' || scanningRack === 'RACK-A3' ? (
+                <div className="absolute bottom-8 right-12 w-36 h-24 border-2 border-red-500 bg-red-500/20 rounded-lg p-2 flex flex-col justify-between animate-pulse">
+                  <span className="text-[9px] font-mono font-bold text-red-300 bg-slate-950/90 px-1 py-0.5 rounded w-max">
+                    P-305 (MISPLACED) 97.1%
+                  </span>
+                  <span className="text-[8px] text-red-200 font-mono">Expected: RACK-A3</span>
+                </div>
+              ) : (
+                <div className="absolute bottom-8 right-12 w-32 h-20 border-2 border-emerald-400 bg-emerald-500/10 rounded-lg p-2 flex flex-col justify-between">
+                  <span className="text-[9px] font-mono font-bold text-emerald-400 bg-slate-950/90 px-1 py-0.5 rounded w-max">
+                    SKU-4802 (MATCH) 99.2%
+                  </span>
+                </div>
+              )}
+
+              <div className="text-center font-mono space-y-1">
+                <p className="text-xs text-slate-400 font-bold">Scanning Active Camera Stream...</p>
+                <p className="text-[10px] text-slate-600">HUD Analysis Engine Operational</p>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                onClick={() => setScanningRack(null)}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold font-mono shadow-lg shadow-indigo-600/30"
+              >
+                Close Scanner HUD
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

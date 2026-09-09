@@ -126,7 +126,108 @@ async def get_items(search: Optional[str] = None, limit: int = 100):
         else:
             item["zone_name"] = None
             item["zone_type"] = None
+        # Ensure expectedLocation & currentLocation fields exist
+        exp_rack = item.get("expected_rack_id") or "RACK-A3"
+        curr_rack = item.get("current_rack_id") or exp_rack
+        item["expected_rack_id"] = exp_rack
+        item["current_rack_id"] = curr_rack
+        item["expectedLocation"] = exp_rack
+        item["currentLocation"] = curr_rack
     return items
+
+
+@app.get("/tasks")
+async def get_tasks():
+    tasks = await db.select("tasks", "*", order="created_at.desc")
+    return tasks
+
+
+@app.post("/tasks/{task_id}/complete")
+async def complete_task(task_id: int):
+    tasks = await db.select("tasks", "*", filters={"id": task_id}, limit=1)
+    if not tasks:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task = tasks[0]
+    task["status"] = "COMPLETED"
+    await db.update("tasks", {"id": task_id}, {"status": "COMPLETED"})
+
+    item_id = task.get("item_id")
+    exp_loc = task.get("expectedLocation")
+    if item_id and exp_loc:
+        # Move item back to expected location
+        await db.update("items", {"id": item_id}, {
+            "current_rack_id": exp_loc,
+            "currentLocation": exp_loc,
+            "status": "in_stock"
+        })
+
+    # Resolve associated anomaly if present
+    anomaly_id = task.get("anomaly_id")
+    if anomaly_id:
+        await db.update("anomalies", {"id": anomaly_id}, {"resolved": True})
+
+    # Broadcast task completed event
+    await manager.broadcast({
+        "type": "task_completed",
+        "data": {
+            "task_id": task_id,
+            "item_id": item_id,
+            "expectedLocation": exp_loc,
+            "status": "COMPLETED",
+        }
+    })
+    return {"status": "success", "task": task}
+
+
+@app.post("/workers/{worker_id}/checkin")
+async def worker_checkin(worker_id: int, zone_id: int = Query(...)):
+    workers = await db.select("workers", "*", filters={"id": worker_id}, limit=1)
+    if not workers:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    zones = await db.select("warehouse_zones", "*", filters={"id": zone_id}, limit=1)
+    if not zones:
+        raise HTTPException(status_code=404, detail="Zone not found")
+
+    updated = await db.update("workers", {"id": worker_id}, {"current_zone_id": zone_id})
+    worker = updated[0] if updated else workers[0]
+    worker["current_zone_id"] = zone_id
+    worker["zone_name"] = zones[0]["name"]
+    worker["zone_type"] = zones[0]["type"]
+
+    await manager.broadcast({
+        "type": "worker_checkin",
+        "data": worker
+    })
+    return worker
+
+
+@app.post("/items/{item_id}/reconcile")
+async def reconcile_item(item_id: int, observed_quantity: int = Query(...)):
+    items = await db.select("items", "*", filters={"id": item_id}, limit=1)
+    if not items:
+        raise HTTPException(status_code=404, detail="Item not found")
+    item = items[0]
+    await db.update("items", {"id": item_id}, {
+        "scanned_quantity": observed_quantity,
+        "expected_quantity": observed_quantity
+    })
+    # Log event
+    event = await db.insert("events", {
+        "item_id": item_id,
+        "zone_id": item.get("current_zone_id") or 1,
+        "event_type": "scanned",
+        "quantity": observed_quantity,
+        "expected_quantity": observed_quantity,
+    })
+    
+    await manager.broadcast({
+        "type": "item_reconciled",
+        "data": {
+            "item_id": item_id,
+            "reconciled_quantity": observed_quantity
+        }
+    })
+    return {"status": "success", "item_id": item_id, "reconciled_quantity": observed_quantity}
 
 
 @app.get("/items/{item_id}/history")
@@ -167,16 +268,26 @@ async def get_workers():
 @app.get("/anomalies")
 async def get_anomalies(page: int = 1, limit: int = 50):
     anomalies = await db.select("anomalies", "*", order="detected_at.desc", limit=limit)
-    items = await db.select("items", "id,sku,name")
+    items = await db.select("items", "id,sku,name,expected_rack_id,current_rack_id")
     item_map = {i["id"]: i for i in items}
+    tasks = await db.select("tasks", "*")
+    task_map = {t["anomaly_id"]: t for t in tasks if t.get("anomaly_id")}
+
     for a in anomalies:
         iid = a.get("item_id")
         if iid and iid in item_map:
             a["item_sku"] = item_map[iid]["sku"]
             a["item_name"] = item_map[iid]["name"]
+            exp = item_map[iid].get("expected_rack_id") or "RACK-A3"
+            curr = item_map[iid].get("current_rack_id") or exp
+            a["expectedLocation"] = exp
+            a["currentLocation"] = curr
         else:
             a["item_sku"] = None
             a["item_name"] = None
+        
+        a["task"] = task_map.get(a["id"])
+
     return anomalies
 
 
@@ -235,3 +346,4 @@ async def ws_live(ws: WebSocket):
             await ws.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(ws)
+
