@@ -39,16 +39,20 @@ An intelligent warehouse automation system that:
 
 | Feature | Description |
 |---------|-------------|
-| 🗺️ **2D Warehouse Grid** | Interactive spatial map of 6 zones with capacity heatbars and item density % |
-| 🚨 **AI Anomaly Detection** | 4 anomaly types detected in real-time: stuck, misplaced, quantity mismatch, environment spike |
-| 📦 **Live Inventory Table** | Searchable, sortable SKU catalog with real-time status badges and qty mismatch highlights |
+| 🗺️ **Top-Down Rack Map** | Interactive spatial map of 6 zones & active racks (`RACK-A1`, `RACK-A3`, `RACK-D5`) with anomaly glow pulses |
+| 📍 **Location Tracking** | Tracks `expectedLocation` vs `currentLocation` per item with high-contrast `MISPLACED` warning tags |
+| ⚙️ **Automated Task Action** | Automatically generates corrective tasks for anomalies: `Anomaly` ➔ `Action` ➔ `Assigned Worker` ➔ `Complete Task` |
+| 👷 **Worker Zone Check-in** | Live zone check-in selector on worker cards that dynamically routes tasks to nearest available staff |
+| 🔍 **Stock Reconciliation** | Compares `Recorded Qty` vs `Observed Qty` with a 1-click **Confirm Reconciliation** action |
+| 📷 **Vision Rack Scanner** | Lightweight HUD modal simulating computer vision item detection with confidence scores (`98.4%`) |
+| 🦾 **Robotic Arm Telemetry** | Live status widget tracking joint angles, payload targets, and completed cycle counts |
+| 📦 **Live Inventory Command** | Searchable, sortable SKU catalog with real-time status badges and location discrepancy alerts |
 | 📍 **Item Journey Timeline** | Full chronological movement history per item with zone flow progress map |
 | 🗺️ **TSP Route Optimizer** | Compares naive vs optimized picker paths with distance & time savings metrics |
 | 🌡️ **Environment Monitor** | Per-zone temperature & humidity animated gauges with ALERT vs NOMINAL status |
-| 👷 **Worker Activity Log** | Live worker roster (shift/zone) + real-time operational event stream |
-| 📊 **KPI Metrics Bar** | Live counters: Total Zones · Tracked SKUs · AI Anomalies · Event Count |
-| ⚡ **WebSocket Live Stream** | 1–3 second real-time updates pushed to all connected clients simultaneously |
-| 🎬 **Demo Mode** | One-click scripted 4-step anomaly sequence for hackathon presentations |
+| ⚡ **WebSocket Live Stream** | 1–3 second real-time updates pushed to all connected clients simultaneously with 0 page refreshes |
+| 🎬 **Deterministic Pitch Demo** | 1-click scripted P-305 misplacement flow (`A3` ➔ `D5`), task assignment, task completion, and auto-resolution |
+
 
 ---
 
